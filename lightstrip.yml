@@ -1,0 +1,316 @@
+esphome:
+  name: downstairs_lightstrip
+
+esp8266:
+  board: nodemcuv2
+
+wifi:
+  ssid: !secret ssid
+  password: !secret wappw
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Lightstrip Fallback Hotspot"
+    password: !secret hotspotpw
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: !secret apipw
+
+ota:
+  password: !secret apipw
+
+### BEGIN GOOD STUFF ###
+
+light:
+  - platform: fastled_clockless
+    chipset: WS2811
+    pin: D5
+    num_leds: 300
+    rgb_order: GRB
+    name: "Downstairs Lightstrip"
+    effects:
+      - random:
+      - addressable_color_wipe:
+          name: Lightstrip Color Wipe
+          colors:
+            - red: 100%
+              green: 0%
+              blue: 0%
+              num_leds: 5
+            - red: 0%
+              green: 100%
+              blue: 0%
+              num_leds: 5
+          add_led_interval: 100ms
+          reverse: false
+      - addressable_color_wipe:
+          name: Lightstrip Color Wipe - Plaid!
+          colors:
+            - red: 100%
+              green: 0%
+              blue: 0%
+              num_leds: 5
+            - red: 0%
+              green: 100%
+              blue: 0%
+              num_leds: 5
+          add_led_interval: 25ms
+          reverse: false
+      - addressable_color_wipe:
+          name: Xmas Chase
+          colors:
+            - red: 20%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 40%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 80%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 100%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 80%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 40%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 20%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 20%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 40%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 80%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 100%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 80%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 40%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 20%
+              blue: 0%
+              num_leds: 1
+          add_led_interval: 100ms
+          reverse: false
+      - addressable_color_wipe:
+          name: Xmas Chase 2
+          colors:
+            - red: 20%
+              green: 80%
+              blue: 0%
+              num_leds: 2
+            - red: 40%
+              green: 60%
+              blue: 0%
+              num_leds: 2
+            - red: 80%
+              green: 20%
+              blue: 0%
+              num_leds: 2
+            - red: 100%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 80%
+              green: 20%
+              blue: 0%
+              num_leds: 2
+            - red: 60%
+              green: 40%
+              blue: 0%
+              num_leds: 2
+            - red: 40%
+              green: 60%
+              blue: 0%
+              num_leds: 2
+            - red: 20%
+              green: 80%
+              blue: 0%
+              num_leds: 2
+            - red: 0%
+              green: 100%
+              blue: 0%
+              num_leds: 1
+          add_led_interval: 75ms
+          reverse: false
+      - addressable_lambda:
+          name: "Fireworks!"
+          update_interval: 0ms
+          lambda: |-
+            // Static variables keep their value even when
+            // stopping and starting the effect again
+
+            // firework phase enum
+            enum Phase { launch, explode, done };
+            // Number of Fireworks possible at a time
+            const uint8_t FIREWORK_COUNT = 6;
+            // Firework explosion size
+            const uint8_t EXPLOSION_SIZE = 5;
+            // Seconds for explosion fade
+            const uint8_t FADE_OUT_RATE = 2;
+            // gravity accelleration in feet/s/s
+            const float GRAVITY = 32.1741;
+            // max height is max pixels minus 5
+            const size_t MAX_HEIGHT = it.size() - EXPLOSION_SIZE;
+            // min height is 2/3 the max pixels
+            const size_t MIN_HEIGHT = (it.size() * 2) / 3;
+            // Probability that a firework will launch
+            const uint8_t LAUNCH_PROB = 2;
+
+            // override pixel structure
+            struct pixelOverride {
+              size_t index;
+              Color color;
+            };
+
+            // firework structure
+            struct Firework {
+              uint32_t launchTime;
+              uint32_t explodeTime;
+              Phase phase;
+              Color color;
+              size_t explodeLoc;
+              float initAcc;
+              size_t lastLoc;
+              Firework() : phase{done} {}
+            };
+
+            // initial firework accelleration
+            static Firework fireworks[FIREWORK_COUNT];
+
+            // normal variables lost their value after each
+            // execution - basically after each update_interval
+            uint32_t currentTime = millis();
+            float seconds;
+            // current firework accelleration
+            float fireworkAccCur;
+            size_t fireworkLoc;
+            size_t height;
+            Color currentFrame[it.size()];
+            uint32_t timePassed;
+            uint8_t fade;
+            size_t end;
+            size_t start;
+            Color currentColor;
+            uint32_t latestExplosion = 0;
+            bool isLatestExplosion = false;
+            pixelOverride launchPixels[2*FIREWORK_COUNT];
+            int overrideCount = 0;
+
+            for (int i = 0; i < FIREWORK_COUNT; i++) {
+              if (initial_run) {
+                fireworks[i].phase = done;
+                continue;
+              }
+
+              switch (fireworks[i].phase) {
+                case done:
+                  if ((random_uint32() % 100) < LAUNCH_PROB) {
+                    // determine random accelleration
+                    height = random_uint32() % (MAX_HEIGHT - MIN_HEIGHT) + MIN_HEIGHT;
+                    fireworks[i].explodeLoc = it.size() - height;
+                    fireworks[i].initAcc = 2 * sqrt(height * GRAVITY);
+                    fireworks[i].color = Color::random_color();
+                    fireworks[i].launchTime = millis();
+                    fireworks[i].phase = launch;
+                    fireworks[i].lastLoc = it.size();
+                  }
+                  break;
+                case explode:
+                  isLatestExplosion = false;
+                  timePassed = currentTime - fireworks[i].explodeTime;
+                  fade = 255 - (255 * timePassed / (FADE_OUT_RATE * 1000));
+                  end = fireworks[i].explodeLoc + EXPLOSION_SIZE;
+                  start = fireworks[i].explodeLoc - EXPLOSION_SIZE;
+
+                  if (timePassed > (FADE_OUT_RATE * 1000)) {
+                    fireworks[i].phase = done;
+                    fade = 0;
+                  }
+
+                  currentColor = fireworks[i].color.fade_to_black(fade);
+                  if (latestExplosion == 0) {
+                    isLatestExplosion = true;
+                    latestExplosion = fireworks[i].explodeTime;
+                  } else if (latestExplosion < fireworks[i].explodeTime) {
+                    isLatestExplosion = true;
+                    latestExplosion = fireworks[i].explodeTime;
+                  }
+
+                  for (size_t i = start; i <= end; i++) {
+                    if (currentFrame[i].r + currentFrame[i].g + currentFrame[i].b == 0 || isLatestExplosion) {
+                      currentFrame[i] = currentColor;
+                    }
+                  }
+                  break;
+                case launch:
+                  seconds = (currentTime - fireworks[i].launchTime) / (float) 1000;
+                  fireworkLoc = it.size() - lroundf((fireworks[i].initAcc * seconds - GRAVITY * seconds * seconds));
+                  if (fireworkLoc <= fireworks[i].explodeLoc || fireworkLoc > fireworks[i].lastLoc) {
+                    fireworks[i].phase = explode;
+                    fireworks[i].explodeTime = currentTime;
+                  }
+
+                  launchPixels[overrideCount].index = fireworkLoc;
+                  launchPixels[overrideCount].color = fireworks[i].color;
+                  overrideCount += 1;
+
+                  if (fireworkLoc != fireworks[i].lastLoc) {
+                    fireworks[i].lastLoc = fireworkLoc;
+                  }
+                  break;
+              }
+            }
+
+            if (initial_run) {
+              it.all() = Color::BLACK;
+              return;
+            }
+
+            // Seperate loop for launch, to ensure these colors overwrite
+            for (int i = 0; i < overrideCount; i++) {
+              currentFrame[launchPixels[i].index] = launchPixels[i].color;
+            }
+            for (int i = 0; i < it.size(); i++) {
+              it[i] = currentFrame[i];
+            }
+status_led:
+  pin:
+    number: D4
+    inverted: true
+
+sensor:
+  - platform: wifi_signal
+    name: "Lightstrip Wifi"
+    update_interval: 60s

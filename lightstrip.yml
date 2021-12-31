@@ -188,12 +188,6 @@ light:
             // Probability that a firework will launch
             const uint8_t LAUNCH_PROB = 2;
 
-            // override pixel structure
-            struct pixelOverride {
-              size_t index;
-              Color color;
-            };
-
             // firework structure
             struct Firework {
               uint32_t launchTime;
@@ -206,10 +200,51 @@ light:
               Firework() : phase{done} {}
             };
 
-            // initial firework accelleration
-            static Firework fireworks[FIREWORK_COUNT];
+            struct FireworkContainer {
+              uint8_t count = 0;
+              Firework arr[FIREWORK_COUNT];
+              FireworkContainer (int c = 0) {
+                count = c;
+              }
+              Firework remove(uint8_t index) {
+                Firework removed;
 
-            // normal variables lost their value after each
+                if (index < count && index >= 0) {
+                  removed = arr[index];
+                  for (uint8_t i = index; i < count - 1; i++) {
+                    arr[i] = arr[i+1];
+                  };
+                  count--;
+                }
+
+                return removed;
+              }
+              void add(Firework newFirework) {
+                if (count < FIREWORK_COUNT) {
+                  arr[count] = newFirework;
+                  count ++;
+                }
+              }
+              Firework& get(uint8_t i) {
+                return arr[i];
+              }
+              void fill(uint8_t fillCount, Phase phase) {
+                count = 0;
+                for (uint8_t i = 0; i < fillCount && i < FIREWORK_COUNT; i++) {
+                  Firework newFirework;
+                  newFirework.phase = phase;
+                  arr[i] = newFirework;
+                  count ++;
+                }
+              }
+            };
+
+            // main Firework arrays
+            static FireworkContainer doneFireworks;
+            static FireworkContainer explodingFireworks;
+            static FireworkContainer launchingFireworks;
+
+            // normal variables lose their value after each
             // execution - basically after each update_interval
             uint32_t currentTime = millis();
             float seconds;
@@ -223,87 +258,71 @@ light:
             size_t end;
             size_t start;
             Color currentColor;
-            uint32_t latestExplosion = 0;
-            bool isLatestExplosion = false;
-            pixelOverride launchPixels[2*FIREWORK_COUNT];
-            int overrideCount = 0;
-
-            for (int i = 0; i < FIREWORK_COUNT; i++) {
-              if (initial_run) {
-                fireworks[i].phase = done;
-                continue;
-              }
-
-              switch (fireworks[i].phase) {
-                case done:
-                  if ((random_uint32() % 100) < LAUNCH_PROB) {
-                    // determine random accelleration
-                    height = random_uint32() % (MAX_HEIGHT - MIN_HEIGHT) + MIN_HEIGHT;
-                    fireworks[i].explodeLoc = it.size() - height;
-                    fireworks[i].initAcc = 2 * sqrt(height * GRAVITY);
-                    fireworks[i].color = Color::random_color();
-                    fireworks[i].launchTime = millis();
-                    fireworks[i].phase = launch;
-                    fireworks[i].lastLoc = it.size();
-                  }
-                  break;
-                case explode:
-                  isLatestExplosion = false;
-                  timePassed = currentTime - fireworks[i].explodeTime;
-                  fade = 255 - (255 * timePassed / (FADE_OUT_RATE * 1000));
-                  end = fireworks[i].explodeLoc + EXPLOSION_SIZE;
-                  start = fireworks[i].explodeLoc - EXPLOSION_SIZE;
-
-                  if (timePassed > (FADE_OUT_RATE * 1000)) {
-                    fireworks[i].phase = done;
-                    fade = 0;
-                  }
-
-                  currentColor = fireworks[i].color.fade_to_black(fade);
-                  if (latestExplosion == 0) {
-                    isLatestExplosion = true;
-                    latestExplosion = fireworks[i].explodeTime;
-                  } else if (latestExplosion < fireworks[i].explodeTime) {
-                    isLatestExplosion = true;
-                    latestExplosion = fireworks[i].explodeTime;
-                  }
-
-                  for (size_t i = start; i <= end; i++) {
-                    if (currentFrame[i].r + currentFrame[i].g + currentFrame[i].b == 0 || isLatestExplosion) {
-                      currentFrame[i] = currentColor;
-                    }
-                  }
-                  break;
-                case launch:
-                  seconds = (currentTime - fireworks[i].launchTime) / (float) 1000;
-                  fireworkLoc = it.size() - lroundf((fireworks[i].initAcc * seconds - GRAVITY * seconds * seconds));
-                  if (fireworkLoc <= fireworks[i].explodeLoc || fireworkLoc > fireworks[i].lastLoc) {
-                    fireworks[i].phase = explode;
-                    fireworks[i].explodeTime = currentTime;
-                  }
-
-                  launchPixels[overrideCount].index = fireworkLoc;
-                  launchPixels[overrideCount].color = fireworks[i].color;
-                  overrideCount += 1;
-
-                  if (fireworkLoc != fireworks[i].lastLoc) {
-                    fireworks[i].lastLoc = fireworkLoc;
-                  }
-                  break;
-              }
-            }
+            Firework phaseChangedFirework;
 
             if (initial_run) {
+              doneFireworks.fill(FIREWORK_COUNT, done);
               it.all() = Color::BLACK;
-              return;
             }
 
-            // Seperate loop for launch, to ensure these colors overwrite
-            for (int i = 0; i < overrideCount; i++) {
-              currentFrame[launchPixels[i].index] = launchPixels[i].color;
+            for (uint8_t i = 0; i < doneFireworks.count; i++) {
+              if ((random_uint32() % 100) < LAUNCH_PROB) {
+                phaseChangedFirework = doneFireworks.remove(i);
+                i--;
+                // determine random accelleration
+                height = random_uint32() % (MAX_HEIGHT - MIN_HEIGHT) + MIN_HEIGHT;
+                phaseChangedFirework.explodeLoc = it.size() - height;
+                phaseChangedFirework.initAcc = 2 * sqrt(height * GRAVITY);
+                phaseChangedFirework.color = Color::random_color();
+                phaseChangedFirework.launchTime = millis();
+                phaseChangedFirework.phase = launch;
+                phaseChangedFirework.lastLoc = it.size();
+                launchingFireworks.add(phaseChangedFirework);
+              }              
             }
-            for (int i = 0; i < it.size(); i++) {
-              it[i] = currentFrame[i];
+
+            for (uint8_t i = 0; i < launchingFireworks.count; i++) {
+              seconds = (currentTime - launchingFireworks.get(i).launchTime) / (float) 1000;
+              fireworkLoc = it.size() - lroundf((launchingFireworks.get(i).initAcc * seconds - GRAVITY * seconds * seconds));
+              if (fireworkLoc <= launchingFireworks.get(i).explodeLoc) {
+                phaseChangedFirework = launchingFireworks.remove(i);
+                phaseChangedFirework.phase = explode;
+                phaseChangedFirework.explodeTime = currentTime;
+                explodingFireworks.add(phaseChangedFirework);
+                i--;
+              } else if (fireworkLoc != launchingFireworks.get(i).lastLoc) {
+                it[launchingFireworks.get(i).lastLoc] = Color::BLACK;
+                launchingFireworks.get(i).lastLoc = fireworkLoc;
+              }
+            }
+
+            for (uint8_t i = 0; i < explodingFireworks.count; i++) {
+              timePassed = currentTime - explodingFireworks.get(i).explodeTime;
+              end = explodingFireworks.get(i).explodeLoc + EXPLOSION_SIZE;
+              start = explodingFireworks.get(i).explodeLoc - EXPLOSION_SIZE;
+
+              if (timePassed > (FADE_OUT_RATE * 1000)) {
+                fade = 0;
+              } else {                
+                fade = 255 - (255 * timePassed / (FADE_OUT_RATE * 1000));
+              }
+
+              currentColor = explodingFireworks.get(i).color.fade_to_black(fade);
+
+              for (size_t j = start; j <= end; j++) {
+                  it[j] = currentColor;
+              }
+              
+              if (timePassed > (FADE_OUT_RATE * 1000)) {
+                phaseChangedFirework = explodingFireworks.remove(i);
+                phaseChangedFirework.phase = done;
+                doneFireworks.add(phaseChangedFirework);
+                i--;
+              }
+            }
+
+            for (uint8_t i = 0; i < launchingFireworks.count; i++) {
+              it[launchingFireworks.get(i).lastLoc] = launchingFireworks.get(i).color;
             }
 status_led:
   pin:

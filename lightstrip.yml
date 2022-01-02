@@ -262,6 +262,8 @@ light:
 
             if (initial_run) {
               doneFireworks.fill(FIREWORK_COUNT, done);
+              launchingFireworks.fill(0, launch);
+              explodingFireworks.fill(0, explode);
               it.all() = Color::BLACK;
             }
 

@@ -326,6 +326,162 @@ light:
             for (uint8_t i = 0; i < launchingFireworks.count; i++) {
               it[launchingFireworks.get(i).lastLoc] = launchingFireworks.get(i).color;
             }
+      - addressable_lambda:
+          name: "Landing Lights Down"
+          update_interval: 0ms
+          lambda: |-
+            // Static variables keep their value even when
+            // stopping and starting the effect again
+
+            // Distance between Landing Lights
+            const size_t LIGHT_DIST = 1;
+            // miliseconds for intensity max/min
+            const uint16_t FADE_RATE = 400;
+            // miliseconds light stays off between cycles
+            const uint16_t REST_TIME = 800;
+            // miliseconds before next light starts
+            const uint16_t LIGHT_INTERVAL = 10;
+            // max distance is max pixels - the light halo on both sides
+            const size_t MAX_DIST = it.size();
+            // Landing Lights Count
+            const size_t LIGHT_COUNT = MAX_DIST / LIGHT_DIST;
+            // Light Cycle Size
+            const uint16_t CYCLE_TIME = (FADE_RATE * 2) + REST_TIME;
+            // In Reverse?
+            const bool isReverse = false;
+
+            // landing light structure
+            struct LandingLight {
+              uint32_t startTime;
+              size_t location;
+              Color color;
+            };
+
+            // Landing light array
+            static std::vector<LandingLight> landingLights;
+
+            // normal variables lose their value after each
+            // execution - basically after each update_interval
+            uint32_t currentTime = millis();
+            uint32_t timePassed;
+            uint16_t timeInCycle;
+            uint8_t fade;
+            Color currentColor;
+
+            if (initial_run) {
+              it.all() = Color::BLACK;
+              landingLights.clear();
+              for (size_t i = 0; i < LIGHT_COUNT; i++) {
+                size_t pixel;
+                if (isReverse) {
+                  pixel = MAX_DIST - i;
+                } else {
+                  pixel = i;
+                }
+
+                landingLights.push_back(LandingLight());
+                landingLights[i].startTime = currentTime + i * LIGHT_INTERVAL;
+                landingLights[i].location = pixel * LIGHT_DIST; 
+                landingLights[i].color = Color::WHITE;
+              }
+            }
+
+            for (size_t i = 0; i < LIGHT_COUNT; i++) {
+              if (landingLights[i].startTime >= currentTime) {
+                continue;
+              }
+              timePassed = currentTime - landingLights[i].startTime;
+              timeInCycle = timePassed % CYCLE_TIME;
+              if (timeInCycle <= FADE_RATE) {
+                fade = 255 * timeInCycle / FADE_RATE;
+                currentColor = landingLights[i].color.fade_to_black(fade);
+              } else if (timeInCycle <= (FADE_RATE * 2)) {
+                fade = 255 - (255 * (timeInCycle - FADE_RATE) / FADE_RATE);
+                currentColor = landingLights[i].color.fade_to_black(fade);
+              } else {
+                currentColor = Color::BLACK;
+              }
+
+              it[landingLights[i].location] = currentColor;
+            }
+      - addressable_lambda:
+          name: "Landing Lights Up"
+          update_interval: 0ms
+          lambda: |-
+            // Static variables keep their value even when
+            // stopping and starting the effect again
+
+            // Distance between Landing Lights
+            const size_t LIGHT_DIST = 1;
+            // miliseconds for intensity max/min
+            const uint16_t FADE_RATE = 400;
+            // miliseconds light stays off between cycles
+            const uint16_t REST_TIME = 800;
+            // miliseconds before next light starts
+            const uint16_t LIGHT_INTERVAL = 10;
+            // max distance is max pixels - the light halo on both sides
+            const size_t MAX_DIST = it.size();
+            // Landing Lights Count
+            const size_t LIGHT_COUNT = MAX_DIST / LIGHT_DIST;
+            // Light Cycle Size
+            const uint16_t CYCLE_TIME = (FADE_RATE * 2) + REST_TIME;
+            // In Reverse?
+            const bool isReverse = true;
+
+            // landing light structure
+            struct LandingLight {
+              uint32_t startTime;
+              size_t location;
+              Color color;
+            };
+
+            // Landing light array
+            static std::vector<LandingLight> landingLights;
+
+            // normal variables lose their value after each
+            // execution - basically after each update_interval
+            uint32_t currentTime = millis();
+            uint32_t timePassed;
+            uint16_t timeInCycle;
+            uint8_t fade;
+            Color currentColor;
+
+            if (initial_run) {
+              it.all() = Color::BLACK;
+              landingLights.clear();
+              for (size_t i = 0; i < LIGHT_COUNT; i++) {
+                size_t pixel;
+                if (isReverse) {
+                  pixel = MAX_DIST - i;
+                } else {
+                  pixel = i;
+                }
+
+                landingLights.push_back(LandingLight());
+                landingLights[i].startTime = currentTime + i * LIGHT_INTERVAL;
+                landingLights[i].location = pixel * LIGHT_DIST; 
+                landingLights[i].color = Color::WHITE;
+              }
+            }
+
+            for (size_t i = 0; i < LIGHT_COUNT; i++) {
+              if (landingLights[i].startTime >= currentTime) {
+                continue;
+              }
+              timePassed = currentTime - landingLights[i].startTime;
+              timeInCycle = timePassed % CYCLE_TIME;
+              if (timeInCycle <= FADE_RATE) {
+                fade = 255 * timeInCycle / FADE_RATE;
+                currentColor = landingLights[i].color.fade_to_black(fade);
+              } else if (timeInCycle <= (FADE_RATE * 2)) {
+                fade = 255 - (255 * (timeInCycle - FADE_RATE) / FADE_RATE);
+                currentColor = landingLights[i].color.fade_to_black(fade);
+              } else {
+                currentColor = Color::BLACK;
+              }
+
+              it[landingLights[i].location] = currentColor;
+            }
 status_led:
   pin:
     number: D4

@@ -354,7 +354,6 @@ light:
             struct LandingLight {
               uint32_t startTime;
               size_t location;
-              Color color;
             };
 
             // Landing light array
@@ -366,7 +365,6 @@ light:
             uint32_t timePassed;
             uint16_t timeInCycle;
             uint8_t fade;
-            Color currentColor;
 
             if (initial_run) {
               it.all() = Color::BLACK;
@@ -382,11 +380,11 @@ light:
                 landingLights.push_back(LandingLight());
                 landingLights[i].startTime = currentTime + i * LIGHT_INTERVAL;
                 landingLights[i].location = pixel * LIGHT_DIST; 
-                landingLights[i].color = Color::WHITE;
               }
             }
 
             for (size_t i = 0; i < LIGHT_COUNT; i++) {
+            Color currentColor = current_color;
               if (landingLights[i].startTime >= currentTime) {
                 continue;
               }
@@ -394,10 +392,10 @@ light:
               timeInCycle = timePassed % CYCLE_TIME;
               if (timeInCycle <= FADE_RATE) {
                 fade = 255 * timeInCycle / FADE_RATE;
-                currentColor = landingLights[i].color.fade_to_black(fade);
+                currentColor = current_color.fade_to_black(fade);
               } else if (timeInCycle <= (FADE_RATE * 2)) {
                 fade = 255 - (255 * (timeInCycle - FADE_RATE) / FADE_RATE);
-                currentColor = landingLights[i].color.fade_to_black(fade);
+                currentColor = current_color.fade_to_black(fade);
               } else {
                 currentColor = Color::BLACK;
               }
@@ -432,7 +430,6 @@ light:
             struct LandingLight {
               uint32_t startTime;
               size_t location;
-              Color color;
             };
 
             // Landing light array
@@ -444,7 +441,6 @@ light:
             uint32_t timePassed;
             uint16_t timeInCycle;
             uint8_t fade;
-            Color currentColor;
 
             if (initial_run) {
               it.all() = Color::BLACK;
@@ -460,11 +456,11 @@ light:
                 landingLights.push_back(LandingLight());
                 landingLights[i].startTime = currentTime + i * LIGHT_INTERVAL;
                 landingLights[i].location = pixel * LIGHT_DIST; 
-                landingLights[i].color = Color::WHITE;
               }
             }
 
             for (size_t i = 0; i < LIGHT_COUNT; i++) {
+              Color currentColor;
               if (landingLights[i].startTime >= currentTime) {
                 continue;
               }
@@ -472,10 +468,10 @@ light:
               timeInCycle = timePassed % CYCLE_TIME;
               if (timeInCycle <= FADE_RATE) {
                 fade = 255 * timeInCycle / FADE_RATE;
-                currentColor = landingLights[i].color.fade_to_black(fade);
+                currentColor = current_color.fade_to_black(fade);
               } else if (timeInCycle <= (FADE_RATE * 2)) {
                 fade = 255 - (255 * (timeInCycle - FADE_RATE) / FADE_RATE);
-                currentColor = landingLights[i].color.fade_to_black(fade);
+                currentColor = current_color.fade_to_black(fade);
               } else {
                 currentColor = Color::BLACK;
               }

@@ -25,6 +25,16 @@ api:
 ota:
   password: !secret apipw
 
+number:
+  - platform: template
+    name: "Downstairs Lightstrip Speed"
+    optimistic: true
+    min_value: -10
+    max_value: 10
+    step: 1
+    initial_value: 10
+    id: downstairs_lightstrip_speed
+
 ### BEGIN GOOD STUFF ###
 
 light:
@@ -409,74 +419,94 @@ light:
             // Static variables keep their value even when
             // stopping and starting the effect again
 
-            // Distance between Landing Lights
-            const size_t LIGHT_DIST = 1;
-            // miliseconds for intensity max/min
-            const uint16_t FADE_RATE = 400;
-            // miliseconds light stays off between cycles
-            const uint16_t REST_TIME = 800;
-            // miliseconds before next light starts
-            const uint16_t LIGHT_INTERVAL = 10;
-            // max distance is max pixels - the light halo on both sides
-            const size_t MAX_DIST = it.size();
-            // Landing Lights Count
-            const size_t LIGHT_COUNT = MAX_DIST / LIGHT_DIST;
-            // Light Cycle Size
-            const uint16_t CYCLE_TIME = (FADE_RATE * 2) + REST_TIME;
-            // In Reverse?
-            const bool isReverse = true;
-
-            // landing light structure
-            struct LandingLight {
-              uint32_t startTime;
-              size_t location;
-            };
+            // Base ms between updates (0 LIGHT_SPEED)
+            const int BASE_SPEED = 245;
+            // Interval per unit speed
+            const int SPEED_INTERVAL = 24;
+            // Speed of the landing lights
+            const int LIGHT_SPEED = id(downstairs_lightstrip_speed).state;
+            // Number of lights
+            const int LIGHT_COUNT = 3;
+            // Size of the halo around the landing light
+            const int HALO_SIZE = 25;
 
             // Landing light array
-            static std::vector<LandingLight> landingLights;
+            static std::deque<int32_t> landingLights;
+            // last update time of the lights
+            static uint32_t lastUpdateTime;
+            // distance between lights
+            static int lightDistance;
 
             // normal variables lose their value after each
             // execution - basically after each update_interval
             uint32_t currentTime = millis();
             uint32_t timePassed;
-            uint16_t timeInCycle;
-            uint8_t fade;
+            // Direction of lights.  false equals up.
+            bool isReverse = LIGHT_SPEED < 0;
+            // Calculated interval between updates
+            uint32_t lightSpeed = BASE_SPEED - (SPEED_INTERVAL * abs(LIGHT_SPEED));
 
             if (initial_run) {
+              int proposedDistance = (it.size() / LIGHT_COUNT) - (2*HALO_SIZE) - 1;
+              ESP_LOGD("LandingLights", "it.size() / LIGHT_COUNT: %i", (it.size() / LIGHT_COUNT));
+              ESP_LOGD("LandingLights",  "proposedDistance: %i", proposedDistance);
+              ESP_LOGD("LandingLights", "lightSpeed: %i", lightSpeed);
+              lightDistance = proposedDistance < 1 ? 1 : proposedDistance;
               it.all() = Color::BLACK;
-              landingLights.clear();
-              for (size_t i = 0; i < LIGHT_COUNT; i++) {
-                size_t pixel;
-                if (isReverse) {
-                  pixel = MAX_DIST - i;
-                } else {
-                  pixel = i;
-                }
+              lastUpdateTime = currentTime - lightSpeed;
 
-                landingLights.push_back(LandingLight());
-                landingLights[i].startTime = currentTime + i * LIGHT_INTERVAL;
-                landingLights[i].location = pixel * LIGHT_DIST; 
-              }
+              landingLights.clear();
+              landingLights.emplace_front (-HALO_SIZE);
+
+              auto logEntry = "lightDistance: " + lightDistance;
+              ESP_LOGD("LandingLights",  "lightDistance: %i", lightDistance);
+              ESP_LOGD("LandingLights",  "lightSpeed: %i", lightSpeed);
             }
 
-            for (size_t i = 0; i < LIGHT_COUNT; i++) {
-              Color currentColor;
-              if (landingLights[i].startTime >= currentTime) {
-                continue;
-              }
-              timePassed = currentTime - landingLights[i].startTime;
-              timeInCycle = timePassed % CYCLE_TIME;
-              if (timeInCycle <= FADE_RATE) {
-                fade = 255 * timeInCycle / FADE_RATE;
-                currentColor = current_color.fade_to_black(fade);
-              } else if (timeInCycle <= (FADE_RATE * 2)) {
-                fade = 255 - (255 * (timeInCycle - FADE_RATE) / FADE_RATE);
-                currentColor = current_color.fade_to_black(fade);
-              } else {
-                currentColor = Color::BLACK;
+            timePassed = currentTime - lastUpdateTime;
+            
+            if (timePassed >= lightSpeed) {
+              boolean isLastDone = false;
+              int lowestLight = it.size();
+              it.all() = Color::BLACK;
+              lastUpdateTime = currentTime;
+              // for each landing light
+              for (auto& lightLocation: landingLights) {
+                if ((lightLocation + 1) < (int)(it.size() + HALO_SIZE)) {
+                  lightLocation ++;
+                  lowestLight = lightLocation < lowestLight ? lightLocation : lowestLight;
+                } else {
+                  isLastDone = true;
+                  continue;
+                }
+                
+                int location = isReverse ? lightLocation : (int)it.size() - lightLocation;
+
+                if (location >= 0 && location < (int)it.size()) {
+                  it[location] = current_color;
+                }
+                
+                // for each halo pixel on either side of the landing light
+                for (int32_t j = 0; j < HALO_SIZE; j++) {
+                  float fadePercent = (float)j / HALO_SIZE;
+                  uint8_t fade = 255 - (uint8)(255 * fadePercent);
+                  Color fadeColor = current_color.fade_to_black(fade);
+                  // halo on the bottom side of the landing light
+                  if ((location - j) >= 0 && (location - j) < (int)it.size()) {
+                    it[location - j] = fadeColor;
+                  }
+                  if ((location + j) >= 0 && (location + j) < (int)it.size()) {
+                    it[location + j] = fadeColor;
+                  }
+                }
               }
 
-              it[landingLights[i].location] = currentColor;
+              if (isLastDone) {
+                landingLights.pop_back();
+              }
+              if (lowestLight >= (HALO_SIZE + lightDistance)) {
+                landingLights.emplace_front (-HALO_SIZE);              
+              }
             }
 status_led:
   pin:

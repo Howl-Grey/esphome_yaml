@@ -337,83 +337,7 @@ light:
               it[launchingFireworks.get(i).lastLoc] = launchingFireworks.get(i).color;
             }
       - addressable_lambda:
-          name: "Landing Lights Down"
-          update_interval: 0ms
-          lambda: |-
-            // Static variables keep their value even when
-            // stopping and starting the effect again
-
-            // Distance between Landing Lights
-            const size_t LIGHT_DIST = 1;
-            // miliseconds for intensity max/min
-            const uint16_t FADE_RATE = 400;
-            // miliseconds light stays off between cycles
-            const uint16_t REST_TIME = 800;
-            // miliseconds before next light starts
-            const uint16_t LIGHT_INTERVAL = 10;
-            // max distance is max pixels - the light halo on both sides
-            const size_t MAX_DIST = it.size();
-            // Landing Lights Count
-            const size_t LIGHT_COUNT = MAX_DIST / LIGHT_DIST;
-            // Light Cycle Size
-            const uint16_t CYCLE_TIME = (FADE_RATE * 2) + REST_TIME;
-            // In Reverse?
-            const bool isReverse = false;
-
-            // landing light structure
-            struct LandingLight {
-              uint32_t startTime;
-              size_t location;
-            };
-
-            // Landing light array
-            static std::vector<LandingLight> landingLights;
-
-            // normal variables lose their value after each
-            // execution - basically after each update_interval
-            uint32_t currentTime = millis();
-            uint32_t timePassed;
-            uint16_t timeInCycle;
-            uint8_t fade;
-
-            if (initial_run) {
-              it.all() = Color::BLACK;
-              landingLights.clear();
-              for (size_t i = 0; i < LIGHT_COUNT; i++) {
-                size_t pixel;
-                if (isReverse) {
-                  pixel = MAX_DIST - i;
-                } else {
-                  pixel = i;
-                }
-
-                landingLights.push_back(LandingLight());
-                landingLights[i].startTime = currentTime + i * LIGHT_INTERVAL;
-                landingLights[i].location = pixel * LIGHT_DIST; 
-              }
-            }
-
-            for (size_t i = 0; i < LIGHT_COUNT; i++) {
-            Color currentColor = current_color;
-              if (landingLights[i].startTime >= currentTime) {
-                continue;
-              }
-              timePassed = currentTime - landingLights[i].startTime;
-              timeInCycle = timePassed % CYCLE_TIME;
-              if (timeInCycle <= FADE_RATE) {
-                fade = 255 * timeInCycle / FADE_RATE;
-                currentColor = current_color.fade_to_black(fade);
-              } else if (timeInCycle <= (FADE_RATE * 2)) {
-                fade = 255 - (255 * (timeInCycle - FADE_RATE) / FADE_RATE);
-                currentColor = current_color.fade_to_black(fade);
-              } else {
-                currentColor = Color::BLACK;
-              }
-
-              it[landingLights[i].location] = currentColor;
-            }
-      - addressable_lambda:
-          name: "Landing Lights Up"
+          name: "Landing Lights"
           update_interval: 0ms
           lambda: |-
             // Static variables keep their value even when
@@ -422,18 +346,20 @@ light:
             // Base ms between updates
             const int BASE_SPEED = 3;
             // Speed of the landing lights
-            const int LIGHTSTRIP_SPEED = id(downstairs_lightstrip_speed).state;
+            const float LIGHTSTRIP_SPEED = id(downstairs_lightstrip_speed).state;
             // Lightstrip speed modifier
-            const int SPEED_MODIFIER = 5 - abs(LIGHTSTRIP_SPEED);
+            const float SPEED_MODIFIER = 5.0 - abs(LIGHTSTRIP_SPEED);
             // Update interval BASE * 2 ^ SPEED
-            const int UPDATE_INTERVAL = BASE_SPEED * pow(2, SPEED_MODIFIER);
+            const int UPDATE_INTERVAL = (int)(BASE_SPEED * pow(2.0, SPEED_MODIFIER));
             // Number of lights
             const int LIGHT_COUNT = 3;
             // Size of the halo around the landing light
             const int HALO_SIZE = 25;
             // Number of pixels
             const int PIXEL_COUNT = it.size();
-
+            // ms it takes to change speed
+            const int REBOUND_TIME = 1500;
+            const bool IS_REVERSE = LIGHTSTRIP_SPEED < 0;
             // Landing light array
             static std::deque<int> landingLights;
             // last update time of the lights
@@ -442,38 +368,75 @@ light:
             static int lightDistance;
             // current update interval
             static int updateInterval;
+            static bool isReverse;
+            // Speed change in progress
+            static bool isChangingSpeed;
+            static float speedStart;
+            static float speedChangeTotal;
+            static float speedCurrent;
+            static uint32_t speedChangeTime;
 
             // normal variables lose their value after each
             // execution - basically after each update_interval
             uint32_t currentTime = millis();
             uint32_t timePassed;
-            // Direction of lights.
-            bool isReverse = LIGHTSTRIP_SPEED < 0;
-
+            
             if (initial_run) {
               int proposedDistance = (PIXEL_COUNT / LIGHT_COUNT) - (2*HALO_SIZE) - 1;
               lightDistance = proposedDistance < 1 ? 1 : proposedDistance;
               it.all() = Color::BLACK;
-              lastUpdateTime = currentTime - UPDATE_INTERVAL;
-              updateInterval = UPDATE_INTERVAL;
-
+              lastUpdateTime = currentTime;
+              updateInterval = 1000;
+              speedCurrent = 0.0;
+              isReverse = IS_REVERSE;
               landingLights.clear();
+              isChangingSpeed = false;
               ESP_LOGD("LandingLights", "UPDATE_INTERVAL: %i", UPDATE_INTERVAL);
               ESP_LOGD("LandingLights",  "lightDistance: %i", lightDistance);
               ESP_LOGD("LandingLights",  "proposedDistance: %i", proposedDistance);
             }
 
-            if (updateInterval > UPDATE_INTERVAL) {
-              updateInterval -= 1;
-            } else if (updateInterval < UPDATE_INTERVAL) {
-              updateInterval += 1;
+
+            if (isChangingSpeed) {
+              int speedTimePassed = currentTime - speedChangeTime;
+              float speedChangePercent = (float)speedTimePassed / REBOUND_TIME;
+              if (speedChangePercent >= 1) {
+                isChangingSpeed = false;
+                isReverse = IS_REVERSE;
+                speedCurrent = LIGHTSTRIP_SPEED; 
+                updateInterval = UPDATE_INTERVAL;
+                
+                ESP_LOGD("LandingLights",  "isChangingSpeed: %s", isChangingSpeed? "true":"false");
+                ESP_LOGD("LandingLights",  "speedCurrent: %f", speedCurrent);
+                ESP_LOGD("LandingLights",  "updateInterval: %i", updateInterval);
+              } else {
+                float speedChangeCurrent = speedChangePercent * speedChangeTotal;
+                speedCurrent = speedStart + speedChangeCurrent;
+                isReverse = speedCurrent < 0;
+                updateInterval = (int) (BASE_SPEED * pow(2.0, (5.0 - abs(speedCurrent))));
+              }
+            } else if (speedCurrent != LIGHTSTRIP_SPEED || isReverse != IS_REVERSE) {
+              isChangingSpeed = true;
+              speedStart = speedCurrent;
+              float speedEnd = LIGHTSTRIP_SPEED;
+              speedChangeTotal = speedEnd - speedStart;
+              speedChangeTime = currentTime;
+              ESP_LOGD("LandingLights",  "isChangingSpeed: %s", isChangingSpeed? "true":"false");
+              ESP_LOGD("LandingLights",  "speedStart: %f", speedStart);
+              ESP_LOGD("LandingLights",  "speedEnd: %f", speedEnd);
+              ESP_LOGD("LandingLights",  "speedChangeTotal: %f", speedChangeTotal);
             }
+
             timePassed = currentTime - lastUpdateTime;
-            int framesPast = timePassed / updateInterval;
-            if (framesPast > 0) {
+            int framesPassed = timePassed / updateInterval;
+
+            if (framesPassed > 0 || speedCurrent == 0) {
               lastUpdateTime = currentTime;
+            } else {
+              return;
             }
             it.all() = Color::BLACK;
+
 
             if (isReverse) {
               if (landingLights.empty()) {
@@ -498,13 +461,12 @@ light:
             std::for_each(
               landingLights.begin(),
               landingLights.end(),
-              [&isReverse,
-               &framesPast,
+              [&framesPassed,
                &PIXEL_COUNT,
                &it,
                &current_color](int &location
             ){
-              location = isReverse ? location - framesPast : location + framesPast;
+              location = isReverse ? location - framesPassed : location + framesPassed;
 
               if (location >= 0 && location < PIXEL_COUNT) {
                 it[location] = current_color;

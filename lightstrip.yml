@@ -432,9 +432,13 @@ light:
 
             if (framesPassed > 0 || speedCurrent == 0) {
               lastUpdateTime = currentTime;
+              if (speedCurrent == 0) {
+                return;
+              }
             } else {
               return;
             }
+            
             it.all() = Color::BLACK;
 
 

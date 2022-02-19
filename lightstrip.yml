@@ -34,6 +34,14 @@ number:
     step: 1
     initial_value: 3
     id: downstairs_lightstrip_speed
+  - platform: template
+    name: "Downstairs Lightstrip Count"
+    optimistic: true
+    min_value: 1
+    max_value: 5
+    step: 1
+    initial_value: 2
+    id: downstairs_lightstrip_count
 
 ### BEGIN GOOD STUFF ###
 
@@ -352,7 +360,7 @@ light:
             // Update interval BASE * 2 ^ SPEED
             const int UPDATE_INTERVAL = (int)(BASE_SPEED * pow(2.0, SPEED_MODIFIER));
             // Number of lights
-            const int LIGHT_COUNT = 3;
+            const int LIGHT_COUNT = id(downstairs_lightstrip_count).state;
             // Size of the halo around the landing light
             const int HALO_SIZE = 25;
             // Number of pixels
@@ -382,7 +390,7 @@ light:
             uint32_t timePassed;
             
             if (initial_run) {
-              int proposedDistance = (PIXEL_COUNT / LIGHT_COUNT) - (2*HALO_SIZE) - 1;
+              int proposedDistance = (PIXEL_COUNT - (LIGHT_COUNT * (2 * HALO_SIZE + 1))) / LIGHT_COUNT;
               lightDistance = proposedDistance < 1 ? 1 : proposedDistance;
               it.all() = Color::BLACK;
               lastUpdateTime = currentTime;

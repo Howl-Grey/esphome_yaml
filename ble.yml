@@ -50,30 +50,6 @@ binary_sensor:
     ibeacon_uuid: "2e6cd66b-1d89-4722-af0d-459a4323e26d"
     name: "AlphaPhone Present In Entryway"
 
-sensor:
-  - platform: template
-    name: "GoatPhone Distance From Entryway"
-    id: goatphone_dist
-    update_interval: 30s
-    unit_of_measurement: "ft"
-    device_class: ""
-    state_class: "measurement"
-    accuracy_decimals: 1
-    entity_category: "diagnostic"
-    lambda: |-
-      return getTracker("goat").get_dist();
-  - platform: template
-    name: "AlphaPhone Distance From Entryway"
-    id: alphaphone_dist
-    update_interval: 30s
-    unit_of_measurement: "ft"
-    device_class: ""
-    state_class: "measurement"
-    accuracy_decimals: 1
-    entity_category: "diagnostic"
-    lambda: |-
-      return getTracker("alpha").get_dist();
-
 status_led:
   pin:
     inverted: False

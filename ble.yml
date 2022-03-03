@@ -1,0 +1,80 @@
+# 2022/02 AMV
+# 2022/03 CCW
+# Wiring:
+# No external components
+
+esphome:
+  name: entryway-sensor
+  platform: ESP32
+  board: nodemcu-32s
+  includes:
+    - lib/OneEuro.h
+    - ble_dist.h
+  on_boot:
+    then:
+      lambda: |-
+        addTracker("goat", "97979a7a-56e3-46f6-8caf-5f680b2f474f");
+        addTracker("alpha", "2e6cd66b-1d89-4722-af0d-459a4323e26d");
+
+wifi:
+  ssid: !secret ssid  
+  password: !secret wappw
+  ap:
+    ssid: entryway-sensor-fbhotspot
+    password: !secret hotspotpw  
+
+captive_portal:
+
+api:
+  password: !secret apipw
+
+logger:
+  
+ota:
+  password: !secret apipw
+
+esp32_ble_tracker:
+  scan_parameters:
+    duration: 15s
+    active: false
+  on_ble_advertise:
+    then:
+      - lambda: |-
+          parseAdvertisement(x);
+
+binary_sensor:
+  - platform: ble_presence
+    ibeacon_uuid: "97979a7a-56e3-46f6-8caf-5f680b2f474f"
+    name: "GoatPhone Present In Entryway"
+  - platform: ble_presence
+    ibeacon_uuid: "2e6cd66b-1d89-4722-af0d-459a4323e26d"
+    name: "AlphaPhone Present In Entryway"
+
+sensor:
+  - platform: template
+    name: "GoatPhone Distance From Entryway"
+    id: goatphone_dist
+    update_interval: 30s
+    unit_of_measurement: "ft"
+    device_class: ""
+    state_class: "measurement"
+    accuracy_decimals: 1
+    entity_category: "diagnostic"
+    lambda: |-
+      return getTracker("goat").get_dist();
+  - platform: template
+    name: "AlphaPhone Distance From Entryway"
+    id: alphaphone_dist
+    update_interval: 30s
+    unit_of_measurement: "ft"
+    device_class: ""
+    state_class: "measurement"
+    accuracy_decimals: 1
+    entity_category: "diagnostic"
+    lambda: |-
+      return getTracker("alpha").get_dist();
+
+status_led:
+  pin:
+    inverted: False
+    number: GPIO2

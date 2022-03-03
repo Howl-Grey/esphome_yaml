@@ -1,0 +1,47 @@
+esphome:
+  name: example
+  platform: ESP32
+  includes:
+    - custom_components/lib/OneEuro.h
+    - custom_components/ble_dist.h
+  on_boot:
+    then:
+      lambda: |-
+        addTracker("phone", "D66CFF56-CCB4-47DE-B148-6667181AB156");
+
+api:
+  password: ""
+
+ota:
+  password: ""
+
+wifi:
+  ssid: "xxx"
+  password: "xxx"
+
+logger:
+  level: DEBUG
+  logs:
+    esp32_ble_tracker: INFO
+
+esp32_ble_tracker:
+  scan_parameters:
+    duration: 60s
+    active: false
+  on_ble_advertise:
+    then:
+      - lambda: |-
+          parseAdvertisement(x);
+
+sensor:
+  - platform: template
+    name: "Phone Distance"
+    id: phone_dist
+    update_interval: 30s
+    unit_of_measurement: "ft"
+    device_class: ""
+    state_class: "measurement"
+    accuracy_decimals: 1
+    entity_category: "diagnostic"
+    lambda: |-
+      return getTracker("phone").get_dist();

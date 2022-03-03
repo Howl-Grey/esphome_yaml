@@ -7,14 +7,6 @@ esphome:
   name: entryway-sensor
   platform: ESP32
   board: nodemcu-32s
-  includes:
-    - lib/OneEuro.h
-    - ble_dist.h
-  on_boot:
-    then:
-      lambda: |-
-        addTracker("goat", "97979a7a-56e3-46f6-8caf-5f680b2f474f");
-        addTracker("alpha", "2e6cd66b-1d89-4722-af0d-459a4323e26d");
 
 wifi:
   ssid: !secret ssid  
@@ -37,10 +29,6 @@ esp32_ble_tracker:
   scan_parameters:
     duration: 15s
     active: false
-  on_ble_advertise:
-    then:
-      - lambda: |-
-          parseAdvertisement(x);
 
 binary_sensor:
   - platform: ble_presence

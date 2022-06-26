@@ -345,7 +345,7 @@ light:
               it[launchingFireworks.get(i).lastLoc] = launchingFireworks.get(i).color;
             }
       - addressable_lambda:
-          name: "Landing Lights"
+          name: "Landing Lights Old"
           update_interval: 0ms
           lambda: |-
             // Static variables keep their value even when
@@ -495,6 +495,170 @@ light:
                 }
                 if ((location + j) >= 0 && (location + j) < PIXEL_COUNT) {
                   it[location + j] = fadeColor;
+                }
+              }
+            });
+      - addressable_lambda:
+          name: "Landing Lights"
+          update_interval: 0ms
+          lambda: |-
+            // Static variables keep their value even when
+            // stopping and starting the effect again
+
+            // Array to hold pride colors
+            static Color PRIDE_COLORS[6] = {
+              Color(0x732982), 
+              Color(0x24408E), 
+              Color(0x007940),
+              Color(0xFDE01A),
+              Color(0xF68A1E),
+              Color(0xD12229)
+            };
+
+            // Base ms between updates
+            const int BASE_SPEED = 2;
+            // Speed of the landing lights
+            const float LIGHTSTRIP_SPEED = id(downstairs_lightstrip_speed).state;
+            // Lightstrip speed modifier
+            const float SPEED_MODIFIER = 5.0 - abs(LIGHTSTRIP_SPEED);
+            // Update interval BASE * 2 ^ SPEED
+            const int UPDATE_INTERVAL = (int)(BASE_SPEED * pow(2.0, SPEED_MODIFIER));
+            // Number of lights
+            const int LIGHT_COUNT = id(downstairs_lightstrip_count).state;
+            // Size of the halo around the landing light
+            const int HALO_SIZE = 24;
+            // Number of pixels
+            const int PIXEL_COUNT = it.size();
+            // ms it takes to change speed
+            const int REBOUND_TIME = 1500;
+            const bool IS_REVERSE = LIGHTSTRIP_SPEED < 0;
+            // Landing light array
+            static std::deque<int> landingLights;
+            // last update time of the lights
+            static uint32_t lastUpdateTime;
+            // distance between lights
+            static int lightDistance;
+            // current update interval
+            static int updateInterval;
+            static bool isReverse;
+            // Speed change in progress
+            static bool isChangingSpeed;
+            static float speedStart;
+            static float speedChangeTotal;
+            static float speedCurrent;
+            static uint32_t speedChangeTime;
+
+            // normal variables lose their value after each
+            // execution - basically after each update_interval
+            uint32_t currentTime = millis();
+            uint32_t timePassed;
+            
+            if (initial_run) {
+              int proposedDistance = (PIXEL_COUNT - (LIGHT_COUNT * (2 * HALO_SIZE + 1))) / LIGHT_COUNT;
+              lightDistance = proposedDistance < 1 ? 1 : proposedDistance;
+              it.all() = Color::BLACK;
+              lastUpdateTime = currentTime;
+              updateInterval = 1000;
+              speedCurrent = 0.0;
+              isReverse = IS_REVERSE;
+              landingLights.clear();
+              isChangingSpeed = false;
+              ESP_LOGD("LandingLights", "UPDATE_INTERVAL: %i", UPDATE_INTERVAL);
+              ESP_LOGD("LandingLights",  "lightDistance: %i", lightDistance);
+              ESP_LOGD("LandingLights",  "proposedDistance: %i", proposedDistance);
+              for (int8_t i=0; i<6;i++)
+                ESP_LOGD("LandingLights",  "prideColor: %f", PRIDE_COLORS[i]);
+            }
+
+
+            if (isChangingSpeed) {
+              int speedTimePassed = currentTime - speedChangeTime;
+              float speedChangePercent = (float)speedTimePassed / REBOUND_TIME;
+              if (speedChangePercent >= 1) {
+                isChangingSpeed = false;
+                isReverse = IS_REVERSE;
+                speedCurrent = LIGHTSTRIP_SPEED; 
+                updateInterval = UPDATE_INTERVAL;
+                
+                ESP_LOGD("LandingLights",  "isChangingSpeed: %s", isChangingSpeed? "true":"false");
+                ESP_LOGD("LandingLights",  "speedCurrent: %f", speedCurrent);
+                ESP_LOGD("LandingLights",  "updateInterval: %i", updateInterval);
+              } else {
+                float speedChangeCurrent = speedChangePercent * speedChangeTotal;
+                speedCurrent = speedStart + speedChangeCurrent;
+                isReverse = speedCurrent < 0;
+                updateInterval = (int) (BASE_SPEED * pow(2.0, (5.0 - abs(speedCurrent))));
+              }
+            } else if (speedCurrent != LIGHTSTRIP_SPEED || isReverse != IS_REVERSE) {
+              isChangingSpeed = true;
+              speedStart = speedCurrent;
+              float speedEnd = LIGHTSTRIP_SPEED;
+              speedChangeTotal = speedEnd - speedStart;
+              speedChangeTime = currentTime;
+              ESP_LOGD("LandingLights",  "isChangingSpeed: %s", isChangingSpeed? "true":"false");
+              ESP_LOGD("LandingLights",  "speedStart: %f", speedStart);
+              ESP_LOGD("LandingLights",  "speedEnd: %f", speedEnd);
+              ESP_LOGD("LandingLights",  "speedChangeTotal: %f", speedChangeTotal);
+            }
+
+            timePassed = currentTime - lastUpdateTime;
+            int framesPassed = timePassed / updateInterval;
+
+            if (framesPassed > 0 || speedCurrent == 0) {
+              lastUpdateTime = currentTime;
+              if (speedCurrent == 0) {
+                return;
+              }
+            } else {
+              return;
+            }
+            
+            it.all() = Color::BLACK;
+
+
+            if (isReverse) {
+              if (landingLights.empty()) {
+                landingLights.push_back(PIXEL_COUNT + HALO_SIZE);
+              } else if (landingLights.back() < (PIXEL_COUNT - HALO_SIZE - lightDistance)) {
+                landingLights.push_back(landingLights.back() + 2*HALO_SIZE + lightDistance);
+              }
+              if (landingLights.front() < -HALO_SIZE) {
+                landingLights.pop_front();
+              }
+            } else {
+              if (landingLights.empty()) {
+                landingLights.push_front(-HALO_SIZE);
+              } else if (landingLights.front() > (HALO_SIZE + lightDistance)) {
+                landingLights.push_front(landingLights.front() - 2*HALO_SIZE - lightDistance);
+              }
+              if (landingLights.back() > (PIXEL_COUNT + HALO_SIZE)) {
+                landingLights.pop_back();
+              }
+            }
+              
+            std::for_each(
+              landingLights.begin(),
+              landingLights.end(),
+              [&framesPassed,
+               &PIXEL_COUNT,
+               &it,
+               &current_color](int &location
+            ){
+              location = isReverse ? location - framesPassed : location + framesPassed;
+
+              if (location >= 0 && location < PIXEL_COUNT) {
+                it[location] = current_color;
+              }
+
+              // for each halo pixel on either side of the landing light
+              for (int32_t j = 0; j < HALO_SIZE; j++) {
+                int8_t prideColor = j / 8;
+                // halo on the bottom side of the landing light
+                if ((location - HALO_SIZE + j) >= 0 && (location - HALO_SIZE + j) < PIXEL_COUNT) {
+                  it[location - HALO_SIZE + j] = PRIDE_COLORS[prideColor];
+                }
+                if ((location + j) >= 0 && (location + j) < PIXEL_COUNT) {
+                  it[location + j] = PRIDE_COLORS[prideColor+3];
                 }
               }
             });
